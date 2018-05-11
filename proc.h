@@ -39,6 +39,14 @@ struct swapfile_metadata{
   char in_swap_file; /// if not 0 then the page is in the swapfile
 };
 
+struct mem_page{
+  struct mem_page *next;
+  struct mem_page *prev;
+  uint aging;
+  void* va;
+  char in_mem;
+};
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -57,9 +65,11 @@ struct proc {
 
   //Swap file. must initiate with create swap file
   struct file *swapFile;      //page file
-  int num_of_total_pages;
   int num_of_pages_in_memory;
   struct swapfile_metadata sfm[MAX_PSYC_PAGES]; /// the index in the table is the offset of the page in the swapfile
+ 
+  struct mem_page mem_pages[MAX_PSYC_PAGES];
+  struct mem_page *first;     /// head of the linked list
 };
 
 // Process memory is laid out contiguously, low addresses first:

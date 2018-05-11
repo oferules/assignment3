@@ -257,7 +257,12 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       kfree(mem);
       return 0;
     }
+
+    #ifndef NONE
+    myproc()->num_of_pages_in_memory++;
+    #endif
   }
+
   return newsz;
 }
 
@@ -395,6 +400,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   }
   return 0;
 }
+
 /// function to take a page from physical memory and put it in the swap file in the disc
 void swapOut(void* va, struct proc *p){
   pte_t* pte = walkpgdir(p->pgdir, va, 0);
@@ -424,7 +430,10 @@ void swapOut(void* va, struct proc *p){
   ///char* physicalAddress = (char*) PTE_ADDR(*pte);
 
   /// maybe p2v on the address
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE);
+  /// divide to 2 chuncks so we dont get panic
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/2);
+  placeOnFile += PGSIZE/2;
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/2);
 
   /// making flags that pages swapped out and not present
   *pte = (*pte | PTE_PG) & ~PTE_P;
@@ -439,6 +448,25 @@ void swapOut(void* va, struct proc *p){
 
   /// refresh the TLB
   lcr3(V2P(p->pgdir));
+}
+
+void updateMemPages(void* va, struct proc *p){
+  #ifdef NFUA
+  int i;
+  for(i = 0; i < MAX_PSYC_PAGES; i++){
+    if(p->mem_pages[i].in_mem == 0){
+      break;
+    }
+  }
+
+  if(i == MAX_PSYC_PAGES){
+    panic("mem_pages is full but shouldn't");
+  }
+
+  p->mem_pages[i].in_mem = 1;
+  p->aging = 0;
+  p->va = va;
+  #endif
 }
 
 void swapIn(void* va, struct proc *p){
@@ -470,7 +498,10 @@ void swapIn(void* va, struct proc *p){
 
   uint placeOnFile = i * PGSIZE;
 
-  readFromSwapFile(p, newVA, placeOnFile, PGSIZE);
+  /// divide to 2 chuncks so we dont get panic
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/2);
+  placeOnFile += PGSIZE/2;
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/2);
 
   /// making flags that pages swapped in and present
   *pte = (V2P(newVA) | PTE_P | PTE_U | PTE_W) & ~PTE_PG;
@@ -479,8 +510,39 @@ void swapIn(void* va, struct proc *p){
   /// update the swapfile metadata
   sfm->in_swap_file = 0;
 
+  /// ****** TODO ***** check if its newVA or startOfVApage
+  updateMemPages(newVA, p);
+
   /// refresh the TLB
   lcr3(V2P(p->pgdir));
+}
+
+/// return virtual address of the page to swap out
+void* selectPageToSwapOut(struct proc *p){
+  int i;
+  int minIndex = -1;
+
+  #ifdef NFUA
+  uint minAge = 0xffffffff;
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+    if(!p->mem_pages[i].in_mem){
+      panic("should not swap out if there is room in memory")
+    }
+
+    if(p->mem_pages[i].age <= minAge){
+      minAge = p->mem_pages[i].age;
+      minIndex = i;
+    }
+  }
+
+  #endif
+
+  if(minIndex == -1){
+    panic("no page was chosen to be swapped out");
+  }
+
+  p->mem_pages[minIndex].in_mem = 0;
+  return p->mem_pages[minIndex].va;
 }
 
 //PAGEBREAK!

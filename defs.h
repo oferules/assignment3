@@ -156,6 +156,7 @@ char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
+int 			strcmp(const char*, const char*);
 
 // syscall.c
 int             argint(int, int*);
@@ -197,6 +198,8 @@ void            clearpteu(pde_t *pgdir, char *uva);
 void 			swapIn(void*, struct proc*);
 void 			swapOut(void*, struct proc*);
 pte_t* 			walkpgdir_noalloc(pde_t *, const void*);
+void* 			selectPageToSwapOut(struct proc *);
+void 			updateNFUA(void);
 
 
 // number of elements in fixed-size array

@@ -38,6 +38,7 @@ trap(struct trapframe *tf)
 {
   pte_t* pte;
   uint va;
+  void* swapOutVa;
 
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
@@ -53,6 +54,11 @@ trap(struct trapframe *tf)
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
+
+      #ifdef NFUA
+        updateNFUA();
+      #endif
+
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
@@ -81,6 +87,7 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
+  #ifndef NONE
   /// check if pg fault or seg fault
   case T_PGFLT:
     va = rcr2();
@@ -90,14 +97,16 @@ trap(struct trapframe *tf)
 
       /// the page was swapped out check if there is enough space in the memory for it
       if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
-        ///swapOut(void* va, struct proc *p);
+        swapOutVa = selectPageToSwapOut(myproc());
+        swapOut(swapOutVa, myproc());
       }
 
       swapIn((void*) va, myproc());
-
+      lapiceoi();
       return;
     }
 
+  #endif
 
   //PAGEBREAK: 13
   default:

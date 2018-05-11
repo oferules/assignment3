@@ -75,6 +75,7 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
+  int i;
 
   acquire(&ptable.lock);
 
@@ -112,6 +113,22 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  #ifndef NONE
+  /// paging infrastructure
+  p->num_of_pages_in_memory = 0;
+
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+    p->sfm[i].in_swap_file = 0;
+  }
+
+  for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
+    p->mem_pages[i].in_mem = 0;
+  }
+
+  p->first = 0;
+
+  #endif
+
   return p;
 }
 
@@ -120,6 +137,10 @@ found:
 void
 userinit(void)
 {
+  #if !defined(NONE) && !defined(NFUA) && !defined(LAPA) && !defined(SCFIFO) && !defined(AQ)
+    panic("selection is undefined");
+  #endif
+
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
@@ -196,6 +217,43 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+
+  #ifndef NONE
+  np->num_of_pages_in_memory = curproc->num_of_pages_in_memory;
+  
+  createSwapFile(np);
+  char transport[PGSIZE/2] = "";
+  int offset = 0;
+  int bytesRead = 0;
+
+  /// copy parent's swapfile
+  if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")){
+    while((bytesRead = readFromSwapFile(curproc, transport, offset, PGSIZE/2))){
+      if(writeToSwapFile(np, transport, offset, bytesRead) == -1){
+        panic("copying swapfile failed");
+      }
+
+      offset += bytesRead;
+    }
+  }
+
+  for(i = 0; i < MAX_PSYC_PAGES ; i++){
+    np->sfm[i].va = curproc->sfm[i].va;
+    np->sfm[i].in_swap_file = curproc->sfm[i].in_swap_file;
+  }
+
+  for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
+    np->mem_pages[i].next = curproc->mem_pages[i].next;
+    np->mem_pages[i].prev = curproc->mem_pages[i].prev;
+    np->mem_pages[i].aging = curproc->mem_pages[i].aging;
+    np->mem_pages[i].va = curproc->mem_pages[i].va;
+    np->mem_pages[i].in_mem = curproc->mem_pages[i].in_mem;
+  }
+
+  np->first = curproc->first;
+
+  #endif
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -287,6 +345,14 @@ wait(void)
       if(p->state == ZOMBIE){
         // Found one.
         pid = p->pid;
+
+        #ifndef NONE
+        if(!removeSwapFile(p)){
+          panic("wait: remove swapfile failed");
+        }
+
+        #endif
+
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
@@ -532,3 +598,34 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+void updateNFUA(){
+  struct proc* p;
+  int i;
+  
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING 
+      && (strcmp(curproc->name, "init") && strcmp(curproc->name, "sh"))){
+      for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+        if(p->mem_pages[i].in_mem){
+          pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+
+          if(!pte){
+            panic("updateNFUA failed");
+          }
+
+          p->mem_pages[i].aging >> 1;
+          if(*pte & PTE_A){
+            p->mem_pages[i].aging |= 0x80000000;
+          } else{
+            p->mem_pages[i].aging &= 0x7fffffff;
+          }
+        }
+      }
+    }
+  }
+
+  release(&ptable.lock);
+}
+

@@ -38,6 +38,22 @@ exec(char *path, char **argv)
   if((pgdir = setupkvm()) == 0)
     goto bad;
 
+  #ifndef NONE
+  /// clean paging metadata
+  curproc->num_of_pages_in_memory = 0;
+
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+    curproc->sfm[i].in_swap_file = 0;
+  }
+
+  for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
+    curproc->mem_pages[i].in_mem = 0;
+  }
+
+  curproc->first = 0;
+
+  #endif
+
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -99,6 +115,13 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+
+  #ifndef NONE
+  /// create new swapfile for process
+  removeSwapFile(curproc);
+  createSwapFile(curproc);
+  #endif
+
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
