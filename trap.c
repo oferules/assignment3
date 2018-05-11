@@ -36,6 +36,9 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
+  pte_t* pte;
+  uint va;
+
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
       exit();
@@ -77,6 +80,24 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+
+  /// check if pg fault or seg fault
+  case T_PGFLT:
+    va = rcr2();
+    pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
+
+    if(((uint)*pte) & PTE_PG){
+
+      /// the page was swapped out check if there is enough space in the memory for it
+      if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
+        ///swapOut(void* va, struct proc *p);
+      }
+
+      swapIn((void*) va, myproc());
+
+      return;
+    }
+
 
   //PAGEBREAK: 13
   default:

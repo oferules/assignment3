@@ -54,6 +54,19 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   return &pgtab[PTX(va)];
 }
 
+pte_t* walkpgdir_noalloc(pde_t *pgdir, const void *va){
+  pde_t *pde;
+  pte_t *pgtab;
+
+  pde = &pgdir[PDX(va)];
+  if(*pde & PTE_P){
+    pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+    return &pgtab[PTX(va)];
+  }
+
+  return 0;
+}
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
@@ -381,6 +394,93 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
     va = va0 + PGSIZE;
   }
   return 0;
+}
+/// function to take a page from physical memory and put it in the swap file in the disc
+void swapOut(void* va, struct proc *p){
+  pte_t* pte = walkpgdir(p->pgdir, va, 0);
+  void* startOfVApage = (void*) PGROUNDDOWN((uint) va);
+
+  if(!*pte){
+    panic("swapOut");
+  }
+
+  struct swapfile_metadata* sfm;
+  int i = 0;
+  for(sfm = p->sfm; sfm < &p->sfm[MAX_PSYC_PAGES] ; sfm++){
+    if(!sfm->in_swap_file){
+      break;
+    }
+
+    i++;
+  }
+
+  /// if all pages are in use
+  if(sfm >= &p->sfm[MAX_PSYC_PAGES]){
+    /// TODO panic or change 
+    panic("swap file is full");
+  }
+
+  uint placeOnFile = i * PGSIZE;
+  ///char* physicalAddress = (char*) PTE_ADDR(*pte);
+
+  /// maybe p2v on the address
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE);
+
+  /// making flags that pages swapped out and not present
+  *pte = (*pte | PTE_PG) & ~PTE_P;
+  p->num_of_pages_in_memory--;
+
+  /// update the swapfile metadata
+  sfm->in_swap_file = 1;
+  sfm->va = startOfVApage;
+
+  /// free the page from the memory
+  kfree(startOfVApage);
+
+  /// refresh the TLB
+  lcr3(V2P(p->pgdir));
+}
+
+void swapIn(void* va, struct proc *p){
+  struct swapfile_metadata* sfm;
+  void* startOfVApage = (void*) PGROUNDDOWN((uint) va);
+
+  int i = 0;
+  for(sfm = p->sfm; sfm < &p->sfm[MAX_PSYC_PAGES] ; sfm++){
+    if(sfm->in_swap_file && sfm->va == startOfVApage){
+      break;
+    }
+
+    i++;
+  }
+
+  if(sfm >= &p->sfm[MAX_PSYC_PAGES]){
+    /// TODO panic or change 
+    panic("the requested page is not in the swapfile");
+  }
+
+  pte_t* pte = walkpgdir(p->pgdir, va, 1);
+
+  if(!*pte){
+    panic("swapIn");
+  }
+
+  /// allocate the page into the memory
+  char* newVA = kalloc();
+
+  uint placeOnFile = i * PGSIZE;
+
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE);
+
+  /// making flags that pages swapped in and present
+  *pte = (V2P(newVA) | PTE_P | PTE_U | PTE_W) & ~PTE_PG;
+  p->num_of_pages_in_memory++;
+
+  /// update the swapfile metadata
+  sfm->in_swap_file = 0;
+
+  /// refresh the TLB
+  lcr3(V2P(p->pgdir));
 }
 
 //PAGEBREAK!
