@@ -41,12 +41,15 @@ exec(char *path, char **argv)
   #ifndef NONE
   /// clean paging metadata
   curproc->num_of_pages_in_memory = 0;
+  curproc->num_of_currently_swapped_out_pages = 0;
+  curproc->num_of_total_swap_out_actions = 0;
+  curproc->num_of_page_faults = 0;
 
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     curproc->sfm[i].in_swap_file = 0;
   }
 
-  for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     curproc->mem_pages[i].in_mem = 0;
   }
 

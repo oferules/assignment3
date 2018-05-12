@@ -18,6 +18,9 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
+extern int freePages;
+extern int totalPages;
+
 static void wakeup1(void *chan);
 
 void
@@ -117,12 +120,15 @@ found:
 
   /// paging infrastructure
   p->num_of_pages_in_memory = 0;
+  p->num_of_page_faults = 0;
+  p->num_of_currently_swapped_out_pages = 0;
+  p->num_of_total_swap_out_actions = 0;
 
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     p->sfm[i].in_swap_file = 0;
   }
 
-  for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     p->mem_pages[i].in_mem = 0;
   }
 
@@ -221,15 +227,16 @@ fork(void)
 
   #ifndef NONE
   np->num_of_pages_in_memory = curproc->num_of_pages_in_memory;
+  np->num_of_currently_swapped_out_pages = curproc->num_of_currently_swapped_out_pages;
   
   createSwapFile(np);
-  char transport[PGSIZE/2] = "";
+  char transport[PGSIZE/4] = "";
   int offset = 0;
   int bytesRead = 0;
 
   /// copy parent's swapfile
   if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")){
-    while((bytesRead = readFromSwapFile(curproc, transport, offset, PGSIZE/2))){
+    while((bytesRead = readFromSwapFile(curproc, transport, offset, PGSIZE/4))){
       if(writeToSwapFile(np, transport, offset, bytesRead) == -1){
         panic("copying swapfile failed");
       }
@@ -351,6 +358,11 @@ wait(void)
         if(!removeSwapFile(p)){
           panic("wait: remove swapfile failed");
         }
+
+        #ifdef TRUE
+          cprintf("%d %d %d %d", p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
+          p->num_of_page_faults, p->num_of_total_swap_out_actions);
+        #endif
 
         #endif
 
@@ -505,6 +517,7 @@ sleep(void *chan, struct spinlock *lk)
   // (wakeup runs with ptable.lock locked),
   // so it's okay to release lk.
   if(lk != &ptable.lock){  //DOC: sleeplock0
+    cprintf("in sleep");
     acquire(&ptable.lock);  //DOC: sleeplock1
     release(lk);
   }
@@ -520,6 +533,7 @@ sleep(void *chan, struct spinlock *lk)
   // Reacquire original lock.
   if(lk != &ptable.lock){  //DOC: sleeplock2
     release(&ptable.lock);
+    cprintf("in sleep 2");
     acquire(lk);
   }
 }
@@ -541,6 +555,7 @@ wakeup1(void *chan)
 void
 wakeup(void *chan)
 {
+  cprintf("in wakeup");
   acquire(&ptable.lock);
   wakeup1(chan);
   release(&ptable.lock);
@@ -597,6 +612,12 @@ procdump(void)
     else
       state = "???";
     cprintf("%d %s %s", p->pid, state, p->name);
+
+    #ifndef NONE
+    cprintf("%d %d %d %d", p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
+      p->num_of_page_faults, p->num_of_total_swap_out_actions);
+    #endif
+
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
@@ -604,12 +625,16 @@ procdump(void)
     }
     cprintf("\n");
   }
+
+  #ifndef NONE
+  cprintf("%d / %d free pages in the system\n", freePages, totalPages);
+  #endif
 }
 
 void updateNFUA(){
   struct proc* p;
   int i;
-  
+
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING)
       && (strcmp(p->name, "init") && strcmp(p->name, "sh"))){

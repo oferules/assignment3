@@ -91,6 +91,7 @@ trap(struct trapframe *tf)
     pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
 
     if(((uint)*pte) & PTE_PG){
+      myproc()->num_of_page_faults++;
 
       if(myproc()->num_of_pages_in_memory > MAX_PSYC_PAGES){
         panic("too many pages in memory, trap");

@@ -66,6 +66,10 @@ struct proc {
   //Swap file. must initiate with create swap file
   struct file *swapFile;      //page file
   int num_of_pages_in_memory;
+  int num_of_currently_swapped_out_pages;
+  int num_of_total_swap_out_actions;
+  int num_of_page_faults;
+
   struct swapfile_metadata sfm[MAX_PSYC_PAGES]; /// the index in the table is the offset of the page in the swapfile
  
   struct mem_page mem_pages[MAX_PSYC_PAGES];

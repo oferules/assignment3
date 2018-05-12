@@ -28,6 +28,7 @@ void updateMemPages(void* va, struct proc *p){
   p->mem_pages[i].in_mem = 1;
   p->mem_pages[i].aging = 0;
   p->mem_pages[i].va = va;
+  
   #endif
 }
 
@@ -37,13 +38,14 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
   #ifdef NFUA
   int i;
   for(i = 0; i < MAX_PSYC_PAGES; i++){
-    if(p->mem_pages[i].in_mem == 1 && p->mem_pages[i].va == va){
+    if(/*p->mem_pages[i].in_mem == 1 && */p->mem_pages[i].va == va){
       break;
     }
   }
 
   if(i == MAX_PSYC_PAGES){
-    panic("mem_pages is full but shouldn't");
+    return;
+    panic(" on remove");
   }
 
   p->mem_pages[i].in_mem = 0;
@@ -300,18 +302,21 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
 
     #ifndef NONE
-      if(myproc()->num_of_pages_in_memory > MAX_PSYC_PAGES){
-        panic("too many pages in memory, allocuvm");
-      }
+      //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
 
-      /// check if there is enough memory for page
-      if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
-        void* swapOutVa = selectPageToSwapOut(myproc());
-        swapOut(swapOutVa, myproc());
-      }
+        if(myproc()->num_of_pages_in_memory > MAX_PSYC_PAGES){
+          panic("too many pages in memory, allocuvm");
+        }
 
-      updateMemPages((void*) a, myproc());
-      myproc()->num_of_pages_in_memory++;
+        /// check if there is enough memory for page
+        if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
+          void* swapOutVa = selectPageToSwapOut(myproc());
+          swapOut(swapOutVa, myproc());
+        }
+
+        updateMemPages((void*) a, myproc());
+        myproc()->num_of_pages_in_memory++;
+      //}
     #endif
 
 
@@ -344,8 +349,10 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         panic("kfree");
 
       #ifndef NONE
-        updateMemPagesOnRemove((void*) a, myproc());
-        myproc()->num_of_pages_in_memory--;
+        //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
+          updateMemPagesOnRemove((void*) a, myproc());
+          myproc()->num_of_pages_in_memory--;
+        //}
       #endif
 
       char *v = P2V(pa);
@@ -464,6 +471,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /// function to take a page from physical memory and put it in the swap file in the disc
 void swapOut(void* va, struct proc *p){
+  cprintf("un swapout\n");
   pte_t* pte = walkpgdir(p->pgdir, va, 0);
   void* startOfVApage = (void*) PGROUNDDOWN((uint) va);
 
@@ -492,13 +500,19 @@ void swapOut(void* va, struct proc *p){
 
   /// maybe p2v on the address
   /// divide to 2 chuncks so we dont get panic
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/2);
-  placeOnFile += PGSIZE/2;
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/2);
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
 
   /// making flags that pages swapped out and not present
   *pte = (*pte | PTE_PG) & ~PTE_P;
   p->num_of_pages_in_memory--;
+
+  cprintf("bug is in swapout?\n");
   updateMemPagesOnRemove(startOfVApage, p);
 
   /// update the swapfile metadata
@@ -507,6 +521,10 @@ void swapOut(void* va, struct proc *p){
 
   /// free the page from the memory
   kfree(startOfVApage);
+
+  /// update stats
+  p->num_of_currently_swapped_out_pages++;
+  p->num_of_total_swap_out_actions++;
 
   /// refresh the TLB
   lcr3(V2P(p->pgdir));
@@ -542,9 +560,13 @@ void swapIn(void* va, struct proc *p){
   uint placeOnFile = i * PGSIZE;
 
   /// divide to 2 chuncks so we dont get panic
-  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/2);
-  placeOnFile += PGSIZE/2;
-  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/2);
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/4);
+  placeOnFile += PGSIZE/4;
+  readFromSwapFile(p, newVA, placeOnFile, PGSIZE/4);
 
   /// making flags that pages swapped in and present
   *pte = (V2P(newVA) | PTE_P | PTE_U | PTE_W) & ~PTE_PG;
@@ -554,7 +576,11 @@ void swapIn(void* va, struct proc *p){
   sfm->in_swap_file = 0;
 
   /// ****** TODO ***** check if its newVA or startOfVApage
+  cprintf("swapIn before bug?\n");
   updateMemPages(newVA, p);
+
+  /// update stats
+  p->num_of_currently_swapped_out_pages--;
 
   /// refresh the TLB
   lcr3(V2P(p->pgdir));
