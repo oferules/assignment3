@@ -312,7 +312,13 @@ exit(void)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
-
+  
+    #ifndef NONE
+    if(removeSwapFile(curproc) != 0){
+        panic("wait: remove swapfile failed");
+    }
+    #endif
+    
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
@@ -354,16 +360,9 @@ wait(void)
         // Found one.
         pid = p->pid;
 
-        #ifndef NONE
-        if(!removeSwapFile(p)){
-          panic("wait: remove swapfile failed");
-        }
-
         #ifdef TRUE
-          cprintf("%d %d %d %d", p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
+          cprintf("process %s ended, page statistics: %d %d %d %d\n",p->name, p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
           p->num_of_page_faults, p->num_of_total_swap_out_actions);
-        #endif
-
         #endif
 
         kfree(p->kstack);
@@ -517,7 +516,6 @@ sleep(void *chan, struct spinlock *lk)
   // (wakeup runs with ptable.lock locked),
   // so it's okay to release lk.
   if(lk != &ptable.lock){  //DOC: sleeplock0
-    cprintf("in sleep");
     acquire(&ptable.lock);  //DOC: sleeplock1
     release(lk);
   }
@@ -533,7 +531,6 @@ sleep(void *chan, struct spinlock *lk)
   // Reacquire original lock.
   if(lk != &ptable.lock){  //DOC: sleeplock2
     release(&ptable.lock);
-    cprintf("in sleep 2");
     acquire(lk);
   }
 }
@@ -555,7 +552,6 @@ wakeup1(void *chan)
 void
 wakeup(void *chan)
 {
-  cprintf("in wakeup");
   acquire(&ptable.lock);
   wakeup1(chan);
   release(&ptable.lock);
