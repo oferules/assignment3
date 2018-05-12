@@ -36,9 +36,11 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
+  #ifndef NONE
   pte_t* pte;
   uint va;
   void* swapOutVa;
+  #endif
 
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
@@ -54,11 +56,6 @@ trap(struct trapframe *tf)
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
-
-      #ifdef NFUA
-        updateNFUA();
-      #endif
-
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
@@ -94,6 +91,10 @@ trap(struct trapframe *tf)
     pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
 
     if(((uint)*pte) & PTE_PG){
+
+      if(myproc()->num_of_pages_in_memory > MAX_PSYC_PAGES){
+        panic("too many pages in memory, trap");
+      }	
 
       /// the page was swapped out check if there is enough space in the memory for it
       if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){

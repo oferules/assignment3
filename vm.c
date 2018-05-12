@@ -10,6 +10,46 @@
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
+/// update the memory pages data of process according to the specified algorithm
+/// on page addition
+void updateMemPages(void* va, struct proc *p){
+  #ifdef NFUA
+  int i;
+  for(i = 0; i < MAX_PSYC_PAGES; i++){
+    if(p->mem_pages[i].in_mem == 0){
+      break;
+    }
+  }
+
+  if(i == MAX_PSYC_PAGES){
+    panic("mem_pages is full but shouldn't");
+  }
+
+  p->mem_pages[i].in_mem = 1;
+  p->mem_pages[i].aging = 0;
+  p->mem_pages[i].va = va;
+  #endif
+}
+
+/// update the memory pages data of process according to the specified algorithm
+/// on page removal
+void updateMemPagesOnRemove(void* va, struct proc *p){
+  #ifdef NFUA
+  int i;
+  for(i = 0; i < MAX_PSYC_PAGES; i++){
+    if(p->mem_pages[i].in_mem == 1 && p->mem_pages[i].va == va){
+      break;
+    }
+  }
+
+  if(i == MAX_PSYC_PAGES){
+    panic("mem_pages is full but shouldn't");
+  }
+
+  p->mem_pages[i].in_mem = 0;
+  #endif
+}
+
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
 void
@@ -258,9 +298,23 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       return 0;
     }
 
+
     #ifndef NONE
-    myproc()->num_of_pages_in_memory++;
+      if(myproc()->num_of_pages_in_memory > MAX_PSYC_PAGES){
+        panic("too many pages in memory, allocuvm");
+      }
+
+      /// check if there is enough memory for page
+      if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
+        void* swapOutVa = selectPageToSwapOut(myproc());
+        swapOut(swapOutVa, myproc());
+      }
+
+      updateMemPages((void*) a, myproc());
+      myproc()->num_of_pages_in_memory++;
     #endif
+
+
   }
 
   return newsz;
@@ -288,11 +342,18 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
+
+      #ifndef NONE
+        updateMemPagesOnRemove((void*) a, myproc());
+        myproc()->num_of_pages_in_memory--;
+      #endif
+
       char *v = P2V(pa);
       kfree(v);
       *pte = 0;
     }
   }
+
   return newsz;
 }
 
@@ -438,6 +499,7 @@ void swapOut(void* va, struct proc *p){
   /// making flags that pages swapped out and not present
   *pte = (*pte | PTE_PG) & ~PTE_P;
   p->num_of_pages_in_memory--;
+  updateMemPagesOnRemove(startOfVApage, p);
 
   /// update the swapfile metadata
   sfm->in_swap_file = 1;
@@ -448,25 +510,6 @@ void swapOut(void* va, struct proc *p){
 
   /// refresh the TLB
   lcr3(V2P(p->pgdir));
-}
-
-void updateMemPages(void* va, struct proc *p){
-  #ifdef NFUA
-  int i;
-  for(i = 0; i < MAX_PSYC_PAGES; i++){
-    if(p->mem_pages[i].in_mem == 0){
-      break;
-    }
-  }
-
-  if(i == MAX_PSYC_PAGES){
-    panic("mem_pages is full but shouldn't");
-  }
-
-  p->mem_pages[i].in_mem = 1;
-  p->aging = 0;
-  p->va = va;
-  #endif
 }
 
 void swapIn(void* va, struct proc *p){
@@ -519,18 +562,19 @@ void swapIn(void* va, struct proc *p){
 
 /// return virtual address of the page to swap out
 void* selectPageToSwapOut(struct proc *p){
-  int i;
+
   int minIndex = -1;
 
   #ifdef NFUA
+  int i;
   uint minAge = 0xffffffff;
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem){
-      panic("should not swap out if there is room in memory")
+      panic("should not swap out if there is room in memory");
     }
 
-    if(p->mem_pages[i].age <= minAge){
-      minAge = p->mem_pages[i].age;
+    if(p->mem_pages[i].aging <= minAge){
+      minAge = p->mem_pages[i].aging;
       minIndex = i;
     }
   }

@@ -75,7 +75,6 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
-  int i;
 
   acquire(&ptable.lock);
 
@@ -114,6 +113,8 @@ found:
   p->context->eip = (uint)forkret;
 
   #ifndef NONE
+  int i;
+
   /// paging infrastructure
   p->num_of_pages_in_memory = 0;
 
@@ -402,6 +403,7 @@ scheduler(void)
       if(p->state != RUNNABLE)
         continue;
 
+
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -411,6 +413,11 @@ scheduler(void)
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
+
+      /// update aging, PTE_A
+      #ifdef NFUA
+        updateNFUA();
+      #endif
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
@@ -603,10 +610,9 @@ void updateNFUA(){
   struct proc* p;
   int i;
   
-  acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING 
-      && (strcmp(curproc->name, "init") && strcmp(curproc->name, "sh"))){
+    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING)
+      && (strcmp(p->name, "init") && strcmp(p->name, "sh"))){
       for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
         if(p->mem_pages[i].in_mem){
           pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
@@ -615,9 +621,12 @@ void updateNFUA(){
             panic("updateNFUA failed");
           }
 
-          p->mem_pages[i].aging >> 1;
+          p->mem_pages[i].aging = p->mem_pages[i].aging >> 1;
           if(*pte & PTE_A){
             p->mem_pages[i].aging |= 0x80000000;
+
+            /// turn off the access bit
+            *pte = *pte & ~PTE_A;
           } else{
             p->mem_pages[i].aging &= 0x7fffffff;
           }
@@ -625,7 +634,5 @@ void updateNFUA(){
       }
     }
   }
-
-  release(&ptable.lock);
 }
 
