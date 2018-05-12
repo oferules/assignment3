@@ -427,8 +427,8 @@ scheduler(void)
       switchkvm();
 
       /// update aging, PTE_A
-      #ifdef NFUA
-        updateNFUA();
+      #if defined(NFUA) || defined(LAPA)
+        updateNFUAandLAPA();
       #endif
 
       // Process is done running for now.
@@ -628,7 +628,7 @@ procdump(void)
   #endif
 }
 
-void updateNFUA(){
+void updateNFUAandLAPA(){
   struct proc* p;
   int i;
 
@@ -640,7 +640,7 @@ void updateNFUA(){
           pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
 
           if(!pte){
-            panic("updateNFUA failed");
+            panic("updateNFUAandLAPA failed");
           }
 
           p->mem_pages[i].aging = p->mem_pages[i].aging >> 1;

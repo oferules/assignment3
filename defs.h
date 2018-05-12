@@ -199,7 +199,7 @@ void 			swapIn(void*, struct proc*);
 void 			swapOut(void*, struct proc*);
 pte_t* 			walkpgdir_noalloc(pde_t *, const void*);
 void* 			selectPageToSwapOut(struct proc *);
-void 			updateNFUA(void);
+void 			updateNFUAandLAPA(void);
 
 
 // number of elements in fixed-size array

@@ -13,7 +13,7 @@ pde_t *kpgdir;  // for use in scheduler()
 /// update the memory pages data of process according to the specified algorithm
 /// on page addition
 void updateMemPages(void* va, struct proc *p){
-  #ifdef NFUA
+  
   int i;
   for(i = 0; i < MAX_PSYC_PAGES; i++){
     if(p->mem_pages[i].in_mem == 0){
@@ -26,20 +26,25 @@ void updateMemPages(void* va, struct proc *p){
   }
 
   p->mem_pages[i].in_mem = 1;
-  p->mem_pages[i].aging = 0;
   p->mem_pages[i].va = va;
   p->num_of_pages_in_memory++;
-  
+
+  #ifdef NFUA
+  p->mem_pages[i].aging = 0;
+  #endif
+
+  #ifdef LAPA
+  p->mem_pages[i].aging = 0xffffffff;
   #endif
 }
 
 /// update the memory pages data of process according to the specified algorithm
 /// on page removal
 void updateMemPagesOnRemove(void* va, struct proc *p){
-  #ifdef NFUA
+  #if defined(NFUA) || defined(LAPA)
   int i;
   for(i = 0; i < MAX_PSYC_PAGES; i++){
-    if(/*p->mem_pages[i].in_mem == 1 && */p->mem_pages[i].va == va){
+    if(p->mem_pages[i].va == va){
       break;
     }
   }
@@ -599,6 +604,31 @@ void* selectPageToSwapOut(struct proc *p){
 
     if(p->mem_pages[i].aging <= minAge){
       minAge = p->mem_pages[i].aging;
+      minIndex = i;
+    }
+  }
+
+  #endif
+
+  #ifdef LAPA
+  int i;
+  uint minAge = 0xffffffff;
+  uint minNumOfOnes = 0;
+  for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+    if(!p->mem_pages[i].in_mem){
+      panic("should not swap out if there is room in memory");
+    }
+
+    uint currNumOfOnes = p->mem_pages[i].aging;
+    int counter = 0;
+    while(currNumOfOnes) {
+        counter += currNumOfOnes % 2;
+        currNumOfOnes >>= 1;
+    }
+
+    if(counter >= minNumOfOnes || (counter == minNumOfOnes && p->mem_pages[i].aging <= minAge)){
+      minAge = p->mem_pages[i].aging;
+      minNumOfOnes = counter;
       minIndex = i;
     }
   }
