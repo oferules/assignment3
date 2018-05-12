@@ -11,10 +11,17 @@ extern char end[];
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
+void printDebugMem(struct proc *p){
+  cprintf("%s num of memory %d\n",p->name, p->num_of_pages_in_memory);
+      int j;
+      for(j = 0 ; j < MAX_PSYC_PAGES ; j++){
+        cprintf("i: %d, in_mem: %d\n",j , p->mem_pages[j].in_mem);
+      }
+}
+
 /// update the memory pages data of process according to the specified algorithm
 /// on page addition
 void updateMemPages(void* va, struct proc *p){
-  cprintf("updateMemPages va: %x\n",va);
   int i;
   for(i = 0; i < MAX_PSYC_PAGES; i++){
     if(p->mem_pages[i].in_mem == 0){
@@ -30,6 +37,7 @@ void updateMemPages(void* va, struct proc *p){
   p->mem_pages[i].va = va;
   p->num_of_pages_in_memory++;
 
+  //cprintf("num of pages in memory: %d\n", p->num_of_pages_in_memory);
   #ifdef NFUA
   p->mem_pages[i].aging = 0;
   #endif
@@ -56,6 +64,7 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
 
   if (p->mem_pages[i].in_mem == 1){
     p->mem_pages[i].in_mem = 0;
+    p->mem_pages[i].va = 0;
     myproc()->num_of_pages_in_memory--;
   }
   #endif
@@ -319,11 +328,13 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
         /// check if there is enough memory for page
         if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
+          //printDebugMem(myproc());
+          cprintf("in alloc\n");
           void* swapOutVa = selectPageToSwapOut(myproc());
           swapOut(swapOutVa, myproc());
         }
 
-        updateMemPages((void*) a, myproc());
+        updateMemPages((void*) mem, myproc());
       //}
     #endif
 
@@ -478,7 +489,8 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /// function to take a page from physical memory and put it in the swap file in the disc
 void swapOut(void* va, struct proc *p){
-  cprintf("un swapout\n");
+  cprintf("in swapout\n");
+
   pte_t* pte = walkpgdir(p->pgdir, va, 0);
   void* startOfVApage = (void*) PGROUNDDOWN((uint) va);
 
@@ -506,19 +518,28 @@ void swapOut(void* va, struct proc *p){
   ///char* physicalAddress = (char*) PTE_ADDR(*pte);
 
   /// maybe p2v on the address
-  /// divide to 2 chuncks so we dont get panic
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
-  placeOnFile += PGSIZE/4;
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
-  placeOnFile += PGSIZE/4;
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
-  placeOnFile += PGSIZE/4;
-  writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  /// divide to 4 chuncks so we dont get panic
+  //cprintf("0p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, startOfVApage, placeOnFile);
+  //writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  //placeOnFile += PGSIZE/4;
+  //cprintf("1p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, startOfVApage, placeOnFile);
 
-  /// making flags that pages swapped out and not present
-  *pte = (*pte | PTE_PG) & ~PTE_P;
+  //writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  //placeOnFile += PGSIZE/4;
+  //cprintf("2p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, startOfVApage, placeOnFile);
 
-  updateMemPagesOnRemove(startOfVApage, p);
+  //writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+  //placeOnFile += PGSIZE/4;
+  //cprintf("3p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, startOfVApage, placeOnFile);
+
+  //writeToSwapFile(p, startOfVApage, placeOnFile, PGSIZE/4);
+
+  int j;
+  for(j = 0 ; j < 4 ; j++){
+    cprintf("3p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, startOfVApage + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4));
+    int a = writeToSwapFile(p, startOfVApage + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
+    cprintf("bytes: %d\n", a);
+  }
 
   /// update the swapfile metadata
   sfm->in_swap_file = 1;
@@ -527,15 +548,25 @@ void swapOut(void* va, struct proc *p){
   /// free the page from the memory
   kfree(startOfVApage);
   
+
+
+  updateMemPagesOnRemove(startOfVApage, p);
+
   /// update stats
   p->num_of_currently_swapped_out_pages++;
   p->num_of_total_swap_out_actions++;
 
+  /// making flags that pages swapped out and not present
+  *pte = (*pte | PTE_PG) & ~PTE_P;
+
   /// refresh the TLB
-  lcr3(V2P(p->pgdir));
+  lcr3(V2P(p->pgdir));  
+
+  cprintf("end swapout\n");
 }
 
 void swapIn(void* va, struct proc *p){
+  cprintf("in swap in\n");
   struct swapfile_metadata* sfm;
   void* startOfVApage = (void*) PGROUNDDOWN((uint) va);
 
@@ -600,6 +631,7 @@ void* selectPageToSwapOut(struct proc *p){
   uint minAge = 0xffffffff;
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem ){
+      //printDebugMem(p);
       panic("should not swap out if there is room in memory");
     }
     
@@ -610,7 +642,6 @@ void* selectPageToSwapOut(struct proc *p){
     if(p->mem_pages[i].aging <= minAge){
       minAge = p->mem_pages[i].aging;
       minIndex = i;
-      cprintf("end: %x, v: %x\n", end, p->mem_pages[i].va);
     }
   }
     
@@ -646,7 +677,7 @@ void* selectPageToSwapOut(struct proc *p){
     panic("no page was chosen to be swapped out");
   }
 
-  p->mem_pages[minIndex].in_mem = 0;
+  //p->mem_pages[minIndex].in_mem = 0;
   return p->mem_pages[minIndex].va;
 }
 

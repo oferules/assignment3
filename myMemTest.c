@@ -14,7 +14,7 @@ main(int argc, char *argv[])
     char *pages[16];
     
     /// allocate 18 pages
-    for (i= 0 ; i< 3 ; i++){
+    for (i= 0 ; i< 4 ; i++){
         printf (1, "allocate 6 pages d\n");
         pages[i] = sbrk(6*PGSIZE);
         sleep(SLEEP);
