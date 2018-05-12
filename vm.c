@@ -28,6 +28,7 @@ void updateMemPages(void* va, struct proc *p){
   p->mem_pages[i].in_mem = 1;
   p->mem_pages[i].aging = 0;
   p->mem_pages[i].va = va;
+  p->num_of_pages_in_memory++;
   
   #endif
 }
@@ -45,10 +46,12 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
 
   if(i == MAX_PSYC_PAGES){
     return;
-    panic(" on remove");
   }
 
-  p->mem_pages[i].in_mem = 0;
+  if (p->mem_pages[i].in_mem == 1){
+    p->mem_pages[i].in_mem = 0;
+    myproc()->num_of_pages_in_memory--;
+  }
   #endif
 }
 
@@ -315,7 +318,6 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         }
 
         updateMemPages((void*) a, myproc());
-        myproc()->num_of_pages_in_memory++;
       //}
     #endif
 
@@ -351,7 +353,6 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       #ifndef NONE
         //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
           updateMemPagesOnRemove((void*) a, myproc());
-          myproc()->num_of_pages_in_memory--;
         //}
       #endif
 
@@ -510,9 +511,7 @@ void swapOut(void* va, struct proc *p){
 
   /// making flags that pages swapped out and not present
   *pte = (*pte | PTE_PG) & ~PTE_P;
-  p->num_of_pages_in_memory--;
 
-  cprintf("bug is in swapout?\n");
   updateMemPagesOnRemove(startOfVApage, p);
 
   /// update the swapfile metadata
@@ -570,7 +569,6 @@ void swapIn(void* va, struct proc *p){
 
   /// making flags that pages swapped in and present
   *pte = (V2P(newVA) | PTE_P | PTE_U | PTE_W) & ~PTE_PG;
-  p->num_of_pages_in_memory++;
 
   /// update the swapfile metadata
   sfm->in_swap_file = 0;

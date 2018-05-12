@@ -300,6 +300,12 @@ exit(void)
   if(curproc == initproc)
     panic("init exiting");
 
+
+  #ifdef TRUE
+    cprintf("process %s ended, page statistics: %d %d %d %d\n",curproc->name, curproc->num_of_pages_in_memory, curproc->num_of_currently_swapped_out_pages, 
+    curproc->num_of_page_faults, curproc->num_of_total_swap_out_actions);
+  #endif
+  
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
     if(curproc->ofile[fd]){
@@ -313,11 +319,12 @@ exit(void)
   end_op();
   curproc->cwd = 0;
   
-    #ifndef NONE
-    if(removeSwapFile(curproc) != 0){
-        panic("wait: remove swapfile failed");
-    }
-    #endif
+  /// remove swap file
+  #ifndef NONE
+  if(removeSwapFile(curproc) != 0){
+    panic("wait: remove swapfile failed");
+  }
+  #endif
     
   acquire(&ptable.lock);
 
@@ -359,12 +366,6 @@ wait(void)
       if(p->state == ZOMBIE){
         // Found one.
         pid = p->pid;
-
-        #ifdef TRUE
-          cprintf("process %s ended, page statistics: %d %d %d %d\n",p->name, p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
-          p->num_of_page_faults, p->num_of_total_swap_out_actions);
-        #endif
-
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
@@ -610,7 +611,7 @@ procdump(void)
     cprintf("%d %s %s", p->pid, state, p->name);
 
     #ifndef NONE
-    cprintf("%d %d %d %d", p->num_of_pages_in_memory, p->num_of_currently_swapped_out_pages, 
+    cprintf(" %d %d %d %d", p->num_of_pages_in_memory+ p->num_of_currently_swapped_out_pages, p->num_of_currently_swapped_out_pages, 
       p->num_of_page_faults, p->num_of_total_swap_out_actions);
     #endif
 
