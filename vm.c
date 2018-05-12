@@ -7,13 +7,14 @@
 #include "proc.h"
 #include "elf.h"
 
+extern char end[];
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
 /// update the memory pages data of process according to the specified algorithm
 /// on page addition
 void updateMemPages(void* va, struct proc *p){
-  
+  cprintf("updateMemPages va: %x\n",va);
   int i;
   for(i = 0; i < MAX_PSYC_PAGES; i++){
     if(p->mem_pages[i].in_mem == 0){
@@ -525,7 +526,7 @@ void swapOut(void* va, struct proc *p){
 
   /// free the page from the memory
   kfree(startOfVApage);
-
+  
   /// update stats
   p->num_of_currently_swapped_out_pages++;
   p->num_of_total_swap_out_actions++;
@@ -598,15 +599,21 @@ void* selectPageToSwapOut(struct proc *p){
   int i;
   uint minAge = 0xffffffff;
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
-    if(!p->mem_pages[i].in_mem){
+    if(!p->mem_pages[i].in_mem ){
       panic("should not swap out if there is room in memory");
     }
-
+    
+    /// check if the page is of the kernel
+    if((uint) p->mem_pages[i].va < (uint) end)
+        continue;
+    
     if(p->mem_pages[i].aging <= minAge){
       minAge = p->mem_pages[i].aging;
       minIndex = i;
+      cprintf("end: %x, v: %x\n", end, p->mem_pages[i].va);
     }
   }
+    
 
   #endif
 
@@ -626,7 +633,7 @@ void* selectPageToSwapOut(struct proc *p){
         currNumOfOnes >>= 1;
     }
 
-    if(counter >= minNumOfOnes || (counter == minNumOfOnes && p->mem_pages[i].aging <= minAge)){
+    if(counter > minNumOfOnes || (counter == minNumOfOnes && p->mem_pages[i].aging <= minAge)){
       minAge = p->mem_pages[i].aging;
       minNumOfOnes = counter;
       minIndex = i;

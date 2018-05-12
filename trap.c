@@ -89,7 +89,7 @@ trap(struct trapframe *tf)
   case T_PGFLT:
     va = rcr2();
     pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
-
+    cprintf("%s num of memory %d",myproc()->name, myproc()->num_of_pages_in_memory);
     if(((uint)*pte) & PTE_PG){
       myproc()->num_of_page_faults++;
 
