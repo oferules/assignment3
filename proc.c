@@ -306,7 +306,7 @@ exit(void)
 
 
   #ifdef TRUE
-    cprintf("process %s ended, page statistics: %d %d %d %d\n",curproc->name, curproc->num_of_pages_in_memory, curproc->num_of_currently_swapped_out_pages, 
+    cprintf("process %s ended, page statistics: %d %d %d %d\n",curproc->name, curproc->num_of_pages_in_memory + curproc->num_of_currently_swapped_out_pages, curproc->num_of_currently_swapped_out_pages, 
     curproc->num_of_page_faults, curproc->num_of_total_swap_out_actions);
   #endif
   
@@ -644,25 +644,23 @@ void updateAQ(){
     if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING)
       && (strcmp(p->name, "init") && strcmp(p->name, "sh"))){
 
-      int loopSize;
-      if(p->num_of_pages_in_memory == MAX_PSYC_PAGES){
-        i = (p->last + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES;
-        loopSize = MAX_PSYC_PAGES - 1;
-      } else {
-        i = p->num_of_pages_in_memory - 1;
-        loopSize = p->num_of_pages_in_memory - 1;
-      }
+      // int loopSize;
+      // if(p->num_of_pages_in_memory == MAX_PSYC_PAGES){
+      //   i = (p->last + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES;
+      //   loopSize = MAX_PSYC_PAGES - 1;
+      // } else {
+      //   i = p->num_of_pages_in_memory - 1;
+      //   loopSize = p->num_of_pages_in_memory - 1;
+      // }
 
-      while(loopSize > 0){
-        cprintf("loopSize: %d, i: %d, pages in mem: %d\n", loopSize, i, p->num_of_pages_in_memory);
 
+      for(i = p->num_of_pages_in_memory - 1 ; i > 0 ; i--){
         if(!p->mem_pages[i].in_mem){
-          cprintf("last: %d\n", p->last);
           panic("updateAQ bad loop");
         }
-        
-        pte_t* pte1 = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
-        pte_t* pte2 = walkpgdir_noalloc(p->pgdir, p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES].mem);
+
+        pte_t* pte1 = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+        pte_t* pte2 = walkpgdir_noalloc(p->pgdir, p->mem_pages[i - 1].va);
 
         if(!pte1 || !pte2){
           panic("updateAQ failed");
@@ -670,14 +668,11 @@ void updateAQ(){
 
         if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
           struct mem_page temp = p->mem_pages[i];
-          p->mem_pages[i] = p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES];
-          p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES] = temp;
+          p->mem_pages[i] = p->mem_pages[i - 1];
+          p->mem_pages[i - 1] = temp;
 
           *pte2 = *pte2 & ~PTE_A;
         } 
-        
-        i = (i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES;
-        loopSize--;
       }
     }
   }

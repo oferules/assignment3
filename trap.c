@@ -87,7 +87,7 @@ trap(struct trapframe *tf)
   #ifndef NONE
   /// check if pg fault or seg fault
   case T_PGFLT:
-    va = rcr2();
+    va = PGROUNDDOWN(rcr2());
     pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
     //cprintf("%s num of memory %d",myproc()->name, myproc()->num_of_pages_in_memory);
     if(((uint)*pte) & PTE_PG){

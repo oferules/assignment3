@@ -81,7 +81,7 @@ void updateMemPages(void* va, void* mem, struct proc *p){
 /// update the memory pages data of process according to the specified algorithm
 /// on page removal
 void updateMemPagesOnRemove(void* va, struct proc *p){
-  #ifndef NONE
+  #if defined(LAPA) || defined(NFUA) || defined(SCFIFO)
     int i;
     for(i = 0; i < MAX_PSYC_PAGES; i++){
       if(p->mem_pages[i].va == va){
@@ -96,16 +96,20 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
     if (p->mem_pages[i].in_mem == 1){
       p->mem_pages[i].in_mem = 0;
       p->mem_pages[i].va = 0;
-      myproc()->num_of_pages_in_memory--;
+      p->num_of_pages_in_memory--;
     }
   #endif
 
   #ifdef AQ
     int i;
-    for(i = 0; i < MAX_PSYC_PAGES; i++){
-      if(p->mem_pages[i].va == va){
-        break;
-      }
+    for(i = 0; i < p->num_of_pages_in_memory - 1; i++){
+      p->mem_pages[i] = p->mem_pages[i+1];
+    }
+
+    if (p->mem_pages[p->num_of_pages_in_memory - 1].in_mem == 1){
+      p->mem_pages[p->num_of_pages_in_memory - 1].in_mem = 0;
+      p->mem_pages[p->num_of_pages_in_memory - 1].va = 0;
+      p->num_of_pages_in_memory--;
     }
   #endif
 }
@@ -407,7 +411,9 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
       #ifndef NONE
         //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
+        if(myproc()->pgdir == pgdir){
           updateMemPagesOnRemove((void*) a, myproc());
+        }
         //}
       #endif
 
@@ -554,10 +560,7 @@ void swapOut(int index, struct proc *p){
 
   int j;
   for(j = 0 ; j < 4 ; j++){
-    int bytes = writeToSwapFile(p, p->mem_pages[index].mem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
-    if(bytes != PGSIZE/4){
-      panic("need to write 1024");
-    }
+    writeToSwapFile(p, p->mem_pages[index].mem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
   }
 
   /// update the swapfile metadata
@@ -578,7 +581,7 @@ void swapOut(int index, struct proc *p){
   /// refresh the TLB
   lcr3(V2P(p->pgdir));  
 
-  printDebugMem(p);
+ // printDebugMem(p);
 }
 
 void swapIn(void* va, struct proc *p){
@@ -610,10 +613,7 @@ void swapIn(void* va, struct proc *p){
 
   int j;
   for(j = 0 ; j < 4 ; j++){
-    int bytes = readFromSwapFile(p, newMem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
-    if(bytes != PGSIZE / 1024){
-      panic("needs to read PGSIZE/4");
-    }
+    readFromSwapFile(p, newMem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
   }
 
   /// making flags that pages swapped in and present
@@ -710,8 +710,9 @@ int selectPageToSwapOut(struct proc *p){
     }
 
     /// last is always at index 0
-    minIndex = p->last;
-    p->last = (p->last +1) % MAX_PSYC_PAGES;
+    // minIndex = p->last;
+    // p->last = (p->last +1) % MAX_PSYC_PAGES;
+    minIndex = 0;
   #endif
 
   if(minIndex == -1){

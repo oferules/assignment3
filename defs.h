@@ -201,6 +201,7 @@ pte_t* 			walkpgdir_noalloc(pde_t *, const void*);
 int 			selectPageToSwapOut(struct proc *);
 void 			updateNFUAandLAPA(void);
 void 			updateAQ(void);
+void			printDebugMem(struct proc *);
 
 
 // number of elements in fixed-size array

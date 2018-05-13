@@ -33,7 +33,7 @@ main(int argc, char *argv[])
     
     for(i = 0 ; i < 18 ; i++){
         printf(1, "\nacceing page: %d\n", i);
-        *pages[i] = 12;
+        pages[i][3] = 12;
     }
 
     // for(i = 17 ; i >= 0 ; i--){
@@ -41,7 +41,7 @@ main(int argc, char *argv[])
     //     *pages[i] = 12;
     // }
 
-    
+    sleep(SLEEP*2);
     exit();
     
 }
