@@ -88,7 +88,6 @@ trap(struct trapframe *tf)
   /// check if pg fault or seg fault
   case T_PGFLT:
     va = rcr2();
-    cprintf("start of page fault va: %x\n", va);
     pte = walkpgdir_noalloc(myproc()->pgdir, (void*) va);
     //cprintf("%s num of memory %d",myproc()->name, myproc()->num_of_pages_in_memory);
     if(((uint)*pte) & PTE_PG){
@@ -100,7 +99,6 @@ trap(struct trapframe *tf)
 
       /// the page was swapped out check if there is enough space in the memory for it
       if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
-        cprintf("in trap, for va: %x\n", va);
         swapOutIndex = selectPageToSwapOut(myproc());
         
         // uncomment below to fix the call to swap out from here

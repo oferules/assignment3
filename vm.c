@@ -47,7 +47,6 @@ void updateMemPages(void* va, void* mem, struct proc *p){
   p->mem_pages[i].mem = mem;
   p->num_of_pages_in_memory++;
 
-  //cprintf("num of pages in memory: %d\n", p->num_of_pages_in_memory);
   #ifdef NFUA
     p->mem_pages[i].aging = 0;
   #endif
@@ -83,22 +82,31 @@ void updateMemPages(void* va, void* mem, struct proc *p){
 /// on page removal
 void updateMemPagesOnRemove(void* va, struct proc *p){
   #ifndef NONE
-  int i;
-  for(i = 0; i < MAX_PSYC_PAGES; i++){
-    if(p->mem_pages[i].va == va){
-      break;
+    int i;
+    for(i = 0; i < MAX_PSYC_PAGES; i++){
+      if(p->mem_pages[i].va == va){
+        break;
+      }
     }
-  }
 
-  if(i == MAX_PSYC_PAGES){
-    return;
-  }
+    if(i == MAX_PSYC_PAGES){
+      return;
+    }
 
-  if (p->mem_pages[i].in_mem == 1){
-    p->mem_pages[i].in_mem = 0;
-    p->mem_pages[i].va = 0;
-    myproc()->num_of_pages_in_memory--;
-  }
+    if (p->mem_pages[i].in_mem == 1){
+      p->mem_pages[i].in_mem = 0;
+      p->mem_pages[i].va = 0;
+      myproc()->num_of_pages_in_memory--;
+    }
+  #endif
+
+  #ifdef AQ
+    int i;
+    for(i = 0; i < MAX_PSYC_PAGES; i++){
+      if(p->mem_pages[i].va == va){
+        break;
+      }
+    }
   #endif
 }
 
@@ -361,10 +369,8 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         /// check if there is enough memory for page
         if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
 
-          cprintf("in alloc\n");
           int swapOutIndex = selectPageToSwapOut(myproc());
           swapOut(swapOutIndex, myproc());
-          cprintf("a: %x, p2v: %x , v2p: %x\n",a , P2V(a), V2P(a));
         }
         updateMemPages((void*) a, mem, myproc());
       //}
@@ -548,9 +554,10 @@ void swapOut(int index, struct proc *p){
 
   int j;
   for(j = 0 ; j < 4 ; j++){
-    cprintf("3p: %s, startOfVApage: %x, placeOnFile: %d\n", p->name, p->mem_pages[index].va + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4));
     int bytes = writeToSwapFile(p, p->mem_pages[index].mem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
-    cprintf("bytes: %d\n", bytes);
+    if(bytes != PGSIZE/4){
+      panic("need to write 1024");
+    }
   }
 
   /// update the swapfile metadata
@@ -559,17 +566,12 @@ void swapOut(int index, struct proc *p){
 
   /// free the page from the memory
   kfree(p->mem_pages[index].mem);
-  cprintf("swap out the address %x\n",p->mem_pages[index].va);
-  
-
-
   updateMemPagesOnRemove(p->mem_pages[index].va, p);
 
   /// update stats
   p->num_of_currently_swapped_out_pages++;
   p->num_of_total_swap_out_actions++;
 
-  cprintf("swapout pte: %x\n", *pte);
   /// making flags that pages swapped out and not present
   *pte = (*pte | PTE_PG) & ~PTE_P;
 
@@ -580,7 +582,6 @@ void swapOut(int index, struct proc *p){
 }
 
 void swapIn(void* va, struct proc *p){
-  cprintf("in swap in\n");
   struct swapfile_metadata* sfm;
 
   int i = 0;
@@ -605,23 +606,14 @@ void swapIn(void* va, struct proc *p){
 
   /// allocate the page into the memory
   char* newMem = kalloc();
-
   uint placeOnFile = i * PGSIZE;
-
-  /// divide to 2 chuncks so we dont get panic
-  //readFromSwapFile(p, newMem, placeOnFile, PGSIZE/4);
-  //placeOnFile += PGSIZE/4;
-  //readFromSwapFile(p, newMem, placeOnFile, PGSIZE/4);
-  //placeOnFile += PGSIZE/4;
-  //readFromSwapFile(p, newMem, placeOnFile, PGSIZE/4);
-  //placeOnFile += PGSIZE/4;
-  //(p, newMem, placeOnFile, PGSIZE/4);
 
   int j;
   for(j = 0 ; j < 4 ; j++){
-    cprintf("swap in: p: %s, newMem: %x, placeOnFile: %d\n", p->name, newMem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4));
     int bytes = readFromSwapFile(p, newMem + (j * PGSIZE/4), placeOnFile + (j * PGSIZE/4), PGSIZE/4);
-    cprintf("read bytes: %d\n", bytes);
+    if(bytes != PGSIZE / 1024){
+      panic("needs to read PGSIZE/4");
+    }
   }
 
   /// making flags that pages swapped in and present
@@ -667,7 +659,6 @@ int selectPageToSwapOut(struct proc *p){
     }
   }
     
-    cprintf("Chosen: index:  %d , va: %x, p2v: %x , v2p: %x\n", minIndex,p->mem_pages[minIndex].va , P2V(p->mem_pages[minIndex].va), V2P(p->mem_pages[minIndex].va));
   #endif
 
   #ifdef LAPA

@@ -435,8 +435,8 @@ scheduler(void)
         updateNFUAandLAPA();
       #endif
 
-      #ifdef QA
-        updateQA();
+      #ifdef AQ
+        updateAQ();
       #endif
 
       // Process is done running for now.
@@ -636,7 +636,7 @@ procdump(void)
   #endif
 }
 
-void updateQA(){
+void updateAQ(){
   struct proc* p;
   int i;
 
@@ -654,15 +654,18 @@ void updateQA(){
       }
 
       while(loopSize > 0){
+        cprintf("loopSize: %d, i: %d, pages in mem: %d\n", loopSize, i, p->num_of_pages_in_memory);
+
         if(!p->mem_pages[i].in_mem){
-          panic("updateQA bad loop");
+          cprintf("last: %d\n", p->last);
+          panic("updateAQ bad loop");
         }
         
         pte_t* pte1 = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
         pte_t* pte2 = walkpgdir_noalloc(p->pgdir, p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES].mem);
 
         if(!pte1 || !pte2){
-          panic("updateQA failed");
+          panic("updateAQ failed");
         }
 
         if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
@@ -690,8 +693,7 @@ void updateNFUAandLAPA(){
       for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
         if(p->mem_pages[i].in_mem){
           pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
-          //pte_t* pte2test = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
-          //cprintf("update NFUA pte va: %x, pte mem: %x\n", *pte, *pte2test);
+          
           if(!pte){
             panic("updateNFUAandLAPA failed");
           }
@@ -699,9 +701,6 @@ void updateNFUAandLAPA(){
           p->mem_pages[i].aging = p->mem_pages[i].aging >> 1;
           if(*pte & PTE_A){
             p->mem_pages[i].aging |= 0x80000000;
-
-            //cprintf("proc: %s, page: %d, aging: %x\n", p->name, i, p->mem_pages[i].aging);
-            /// turn off the access bit
             *pte = *pte & ~PTE_A;
           } else{
             p->mem_pages[i].aging &= 0x7fffffff;
