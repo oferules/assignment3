@@ -4,7 +4,7 @@
 #include "syscall.h"
 
 #define PGSIZE 4096    // bytes mapped by a page
-#define SLEEP 0
+#define SLEEP 300
 #define NUM_OF_PAGES 18
 int
 main(int argc, char *argv[])
