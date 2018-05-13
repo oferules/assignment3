@@ -44,6 +44,7 @@ struct mem_page{
   struct mem_page *prev;
   uint aging;
   void* va;
+  void* mem;
   char in_mem;
 };
 
@@ -73,7 +74,8 @@ struct proc {
   struct swapfile_metadata sfm[MAX_PSYC_PAGES]; /// the index in the table is the offset of the page in the swapfile
  
   struct mem_page mem_pages[MAX_PSYC_PAGES];
-  struct mem_page *first;     /// head of the linked list
+  int first;     /// head of the linked list
+  int last;
 };
 
 // Process memory is laid out contiguously, low addresses first:

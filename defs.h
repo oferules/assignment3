@@ -196,9 +196,9 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 void 			swapIn(void*, struct proc*);
-void 			swapOut(void*, struct proc*);
+void 			swapOut(int, struct proc*);
 pte_t* 			walkpgdir_noalloc(pde_t *, const void*);
-void* 			selectPageToSwapOut(struct proc *);
+int 			selectPageToSwapOut(struct proc *);
 void 			updateNFUAandLAPA(void);
 
 

@@ -54,6 +54,7 @@ exec(char *path, char **argv)
   }
 
   curproc->first = 0;
+  curproc->last = 0;
 
   #endif
 

@@ -98,9 +98,7 @@ kalloc(void)
   r = kmem.freelist;
   
   if(r){
-      cprintf("before: r: %x\n", r);
     kmem.freelist = r->next;
-    cprintf("after\n");
     freePages--;
   }
   

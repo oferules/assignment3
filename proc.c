@@ -133,6 +133,7 @@ found:
   }
 
   p->first = 0;
+  p->last = 0;
 
   #endif
 
@@ -256,10 +257,12 @@ fork(void)
     np->mem_pages[i].prev = curproc->mem_pages[i].prev;
     np->mem_pages[i].aging = curproc->mem_pages[i].aging;
     np->mem_pages[i].va = curproc->mem_pages[i].va;
+    np->mem_pages[i].mem = curproc->mem_pages[i].mem;
     np->mem_pages[i].in_mem = curproc->mem_pages[i].in_mem;
   }
 
   np->first = curproc->first;
+  np->last = curproc->last;
 
   #endif
 
@@ -430,6 +433,10 @@ scheduler(void)
       /// update aging, PTE_A
       #if defined(NFUA) || defined(LAPA)
         updateNFUAandLAPA();
+      #endif
+
+      #ifdef QA
+        updateQA();
       #endif
 
       // Process is done running for now.
@@ -629,6 +636,50 @@ procdump(void)
   #endif
 }
 
+void updateQA(){
+  struct proc* p;
+  int i;
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING)
+      && (strcmp(p->name, "init") && strcmp(p->name, "sh"))){
+
+      int loopSize;
+      if(p->num_of_pages_in_memory == MAX_PSYC_PAGES){
+        i = (p->last + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES;
+        loopSize = MAX_PSYC_PAGES - 1;
+      } else {
+        i = p->num_of_pages_in_memory - 1;
+        loopSize = p->num_of_pages_in_memory - 1;
+      }
+
+      while(loopSize > 0){
+        if(!p->mem_pages[i].in_mem){
+          panic("updateQA bad loop");
+        }
+        
+        pte_t* pte1 = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
+        pte_t* pte2 = walkpgdir_noalloc(p->pgdir, p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES].mem);
+
+        if(!pte1 || !pte2){
+          panic("updateQA failed");
+        }
+
+        if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
+          struct mem_page temp = p->mem_pages[i];
+          p->mem_pages[i] = p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES];
+          p->mem_pages[(i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES] = temp;
+
+          *pte2 = *pte2 & ~PTE_A;
+        } 
+        
+        i = (i + MAX_PSYC_PAGES - 1) % MAX_PSYC_PAGES;
+        loopSize--;
+      }
+    }
+  }
+}
+
 void updateNFUAandLAPA(){
   struct proc* p;
   int i;
@@ -638,8 +689,9 @@ void updateNFUAandLAPA(){
       && (strcmp(p->name, "init") && strcmp(p->name, "sh"))){
       for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
         if(p->mem_pages[i].in_mem){
-          pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
-
+          pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
+          //pte_t* pte2test = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].mem);
+          //cprintf("update NFUA pte va: %x, pte mem: %x\n", *pte, *pte2test);
           if(!pte){
             panic("updateNFUAandLAPA failed");
           }
@@ -648,6 +700,7 @@ void updateNFUAandLAPA(){
           if(*pte & PTE_A){
             p->mem_pages[i].aging |= 0x80000000;
 
+            //cprintf("proc: %s, page: %d, aging: %x\n", p->name, i, p->mem_pages[i].aging);
             /// turn off the access bit
             *pte = *pte & ~PTE_A;
           } else{
