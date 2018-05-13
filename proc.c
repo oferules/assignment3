@@ -306,7 +306,7 @@ exit(void)
 
 
   #ifdef TRUE
-    cprintf("process %s ended, page statistics: %d %d %d %d\n",curproc->name, curproc->num_of_pages_in_memory + curproc->num_of_currently_swapped_out_pages, curproc->num_of_currently_swapped_out_pages, 
+    cprintf("process %s, pid %d ended, page statistics: %d %d %d %d\n",curproc->name, curproc->pid, curproc->num_of_pages_in_memory + curproc->num_of_currently_swapped_out_pages, curproc->num_of_currently_swapped_out_pages, 
     curproc->num_of_page_faults, curproc->num_of_total_swap_out_actions);
   #endif
   
@@ -317,19 +317,21 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
-
-  begin_op();
-  iput(curproc->cwd);
-  end_op();
-  curproc->cwd = 0;
   
+ cprintf("!!!!!!!!!!!!!!!!!!! p %d\n", curproc->pid );
+
   /// remove swap file
   #ifndef NONE
   if(removeSwapFile(curproc) != 0){
     panic("wait: remove swapfile failed");
   }
-  #endif
-    
+  #endif 
+  
+  begin_op();
+  iput(curproc->cwd);
+  end_op();
+  curproc->cwd = 0;
+  
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
@@ -460,7 +462,6 @@ sched(void)
 {
   int intena;
   struct proc *p = myproc();
-
   if(!holding(&ptable.lock))
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
