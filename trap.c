@@ -101,11 +101,14 @@ trap(struct trapframe *tf)
       if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
         cprintf("in trap, for va: %x\n", va);
         swapOutVa = selectPageToSwapOut(myproc());
+        
+        // uncomment below to fix the call to swap out from here
+        // popcli();
         swapOut(swapOutVa, myproc());
       }
 
       swapIn((void*) va, myproc());
-      lapiceoi();
+      // lapiceoi();
       return;
     }
 

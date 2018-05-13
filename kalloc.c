@@ -73,7 +73,6 @@ kfree(char *v)
   }
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
-
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = (struct run*)v;
@@ -92,14 +91,19 @@ char*
 kalloc(void)
 {
   struct run *r;
-
+    
   if(kmem.use_lock)
     acquire(&kmem.lock);
+  
   r = kmem.freelist;
+  
   if(r){
+      cprintf("before: r: %x\n", r);
     kmem.freelist = r->next;
+    cprintf("after\n");
     freePages--;
   }
+  
   if(kmem.use_lock)
     release(&kmem.lock);
 

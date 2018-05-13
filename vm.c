@@ -11,11 +11,19 @@ extern char end[];
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
-void printDebugMem(struct proc *p){
-  cprintf("%s num of memory %d\n",p->name, p->num_of_pages_in_memory);
+void printDebugSFM(struct proc *p){
+  cprintf("\n%s num of pages in swap file: %d\n",p->name, p->num_of_currently_swapped_out_pages);
       int j;
       for(j = 0 ; j < MAX_PSYC_PAGES ; j++){
-        cprintf("i: %d, in_mem: %d\n",j , p->mem_pages[j].in_mem);
+        cprintf("i: %d, in_swap_file: %d, va: %x\n",j , p->sfm[j].in_swap_file, p->sfm[j].va);
+      }
+}
+
+void printDebugMem(struct proc *p){
+  cprintf("\n%s num of pages in memory:  %d\n",p->name, p->num_of_pages_in_memory);
+      int j;
+      for(j = 0 ; j < MAX_PSYC_PAGES ; j++){
+        cprintf("i: %d, in_mem: %d, va: %x, age: %x\n",j , p->mem_pages[j].in_mem,p->mem_pages[j].va,p->mem_pages[j].aging );
       }
 }
 
@@ -33,6 +41,7 @@ void updateMemPages(void* va, struct proc *p){
     panic("mem_pages is full but shouldn't");
   }
 
+  cprintf("address to put: %x , in index %d\n",va, i);
   p->mem_pages[i].in_mem = 1;
   p->mem_pages[i].va = va;
   p->num_of_pages_in_memory++;
@@ -45,6 +54,7 @@ void updateMemPages(void* va, struct proc *p){
   #ifdef LAPA
   p->mem_pages[i].aging = 0xffffffff;
   #endif
+  cprintf("finished updateMemPages\n");
 }
 
 /// update the memory pages data of process according to the specified algorithm
@@ -304,13 +314,16 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
+    if(myproc()->pid == 3) cprintf("enter for \n");
     mem = kalloc();
+    if(myproc()->pid == 3) cprintf("after kalloc \n");
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
+    if(myproc()->pid == 3) cprintf("after memset \n");
     if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
@@ -328,12 +341,12 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
         /// check if there is enough memory for page
         if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
-          //printDebugMem(myproc());
+
           cprintf("in alloc\n");
           void* swapOutVa = selectPageToSwapOut(myproc());
           swapOut(swapOutVa, myproc());
+          cprintf("a: %x, p2v: %x , v2p: %x\n",a , P2V(a), V2P(a));
         }
-
         updateMemPages((void*) mem, myproc());
       //}
     #endif
@@ -547,6 +560,7 @@ void swapOut(void* va, struct proc *p){
 
   /// free the page from the memory
   kfree(startOfVApage);
+  cprintf("swap out the address %x\n",startOfVApage);
   
 
 
@@ -562,7 +576,9 @@ void swapOut(void* va, struct proc *p){
   /// refresh the TLB
   lcr3(V2P(p->pgdir));  
 
-  cprintf("end swapout\n");
+  
+  cprintf("after swap out\n");
+  printDebugMem(p);
 }
 
 void swapIn(void* va, struct proc *p){
@@ -629,9 +645,13 @@ void* selectPageToSwapOut(struct proc *p){
   #ifdef NFUA
   int i;
   uint minAge = 0xffffffff;
+  
+    cprintf("before select page\n");
+    printDebugMem(p);
+
+    
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem ){
-      //printDebugMem(p);
       panic("should not swap out if there is room in memory");
     }
     
@@ -645,7 +665,7 @@ void* selectPageToSwapOut(struct proc *p){
     }
   }
     
-
+    cprintf("Chosen: index:  %d , va: %x, p2v: %x , v2p: %x\n", minIndex,p->mem_pages[minIndex].va , P2V(p->mem_pages[minIndex].va), V2P(p->mem_pages[minIndex].va));
   #endif
 
   #ifdef LAPA
