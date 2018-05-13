@@ -101,11 +101,21 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
   #endif
 
   #ifdef AQ
+
+    /// look for the first index to move to the start of the array
     int i;
-    for(i = 0; i < p->num_of_pages_in_memory - 1; i++){
+    for(i = 0 ; i < p->num_of_pages_in_memory - 1 ; i++){
+      if(p->mem_pages[i].va == va){
+        break;
+      }
+    }
+
+    /// move all the pages metadata 1 to the left after taking out one
+    for(; i < p->num_of_pages_in_memory - 1; i++){
       p->mem_pages[i] = p->mem_pages[i+1];
     }
 
+    /// remove the last (duplicated) page metadata
     if (p->mem_pages[p->num_of_pages_in_memory - 1].in_mem == 1){
       p->mem_pages[p->num_of_pages_in_memory - 1].in_mem = 0;
       p->mem_pages[p->num_of_pages_in_memory - 1].va = 0;
@@ -647,11 +657,14 @@ int selectPageToSwapOut(struct proc *p){
   uint minAge = 0xffffffff;
   
     //printDebugMem(p);
-
-    
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem ){
       panic("should not swap out if there is room in memory");
+    }
+
+    pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+    if(!(*pte & PTE_U)){
+      continue;
     }
     
     /// check if the page is of the kernel
@@ -673,6 +686,11 @@ int selectPageToSwapOut(struct proc *p){
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem){
       panic("should not swap out if there is room in memory");
+    }
+
+    pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+    if(!(*pte & PTE_U)){
+      continue;
     }
 
     uint currNumOfOnes = p->mem_pages[i].aging;
@@ -697,7 +715,14 @@ int selectPageToSwapOut(struct proc *p){
         panic("should not swap out if there is room in memory");
       }
 
-      pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[p->first].mem);
+      pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[p->first].va);
+
+      /// should not swap out pages that don't belong to the user
+      if(!(*pte & PTE_U)){
+        p->first = (p->first + 1) % MAX_PSYC_PAGES;
+        continue;
+      }
+
       isTrue = *pte & PTE_A;
       *pte = *pte & ~PTE_A;
       p->first = (p->first + 1) % MAX_PSYC_PAGES;
@@ -717,7 +742,14 @@ int selectPageToSwapOut(struct proc *p){
     /// last is always at index 0
     // minIndex = p->last;
     // p->last = (p->last +1) % MAX_PSYC_PAGES;
-    minIndex = 0;
+    for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+      pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+      if((*pte & PTE_U)){
+        break;
+      }
+    }
+
+    minIndex = i;
   #endif
 
   if(minIndex == -1){

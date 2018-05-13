@@ -318,7 +318,6 @@ exit(void)
     }
   }
   
- cprintf("!!!!!!!!!!!!!!!!!!! p %d\n", curproc->pid );
 
   /// remove swap file
   #ifndef NONE
