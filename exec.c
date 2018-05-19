@@ -47,15 +47,23 @@ exec(char *path, char **argv)
 
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     curproc->sfm[i].in_swap_file = 0;
+    curproc->sfm[i].va = 0;
   }
 
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
+    curproc->mem_pages[i].aging = 0;
+    curproc->mem_pages[i].va = 0;
+    curproc->mem_pages[i].mem = 0;
     curproc->mem_pages[i].in_mem = 0;
   }
 
   curproc->first = 0;
   curproc->last = 0;
 
+  
+  /// create new swapfile for process
+  removeSwapFile(curproc);
+  createSwapFile(curproc);
   #endif
 
   // Load program into memory.
@@ -120,11 +128,6 @@ exec(char *path, char **argv)
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
 
-  #ifndef NONE
-  /// create new swapfile for process
-  removeSwapFile(curproc);
-  createSwapFile(curproc);
-  #endif
 
   switchuvm(curproc);
   freevm(oldpgdir);

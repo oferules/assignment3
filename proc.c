@@ -232,19 +232,19 @@ fork(void)
   np->num_of_currently_swapped_out_pages = curproc->num_of_currently_swapped_out_pages;
   
   createSwapFile(np);
-  char transport[PGSIZE/4] = "";
-  int offset = 0;
-  int bytesRead = 0;
-
+  
   /// copy parent's swapfile
-  if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")){
-    while((bytesRead = readFromSwapFile(curproc, transport, offset, PGSIZE/4))){
-      if(writeToSwapFile(np, transport, offset, bytesRead) == -1){
-        panic("copying swapfile failed");
+  if(strncmp(curproc->name,"init",4) !=0 && strncmp(curproc->name,"sh",2) !=0) {
+      uint size = PGSIZE / 2;
+      char buffer[size];
+      uint fileOffset = 0;
+      uint read = 0;
+      while((read = readFromSwapFile(curproc, buffer, fileOffset, size)) > 0){
+          if (writeToSwapFile(np, buffer, fileOffset, read) == -1) {
+              panic("fork: writeToSwapFile FAILD");
+          }
+          fileOffset = fileOffset + read;
       }
-
-      offset += bytesRead;
-    }
   }
 
   for(i = 0; i < MAX_PSYC_PAGES ; i++){
@@ -372,6 +372,7 @@ wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
+        
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -663,12 +664,19 @@ void updateAQ(){
         if(!pte1 || !pte2){
           panic("updateAQ failed");
         }
-
+        
+        /// replace places
         if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
-          struct mem_page temp = p->mem_pages[i];
-          p->mem_pages[i] = p->mem_pages[i - 1];
-          p->mem_pages[i - 1] = temp;
-
+          struct mem_page temp;
+          temp.va=  p->mem_pages[i].va;
+          temp.mem=  p->mem_pages[i].mem;
+          
+          p->mem_pages[i].va = p->mem_pages[i - 1].va;
+          p->mem_pages[i].mem = p->mem_pages[i - 1].mem;
+          
+          p->mem_pages[i - 1].va = temp.va;
+          p->mem_pages[i - 1].mem = temp.mem;
+          
           *pte2 = *pte2 & ~PTE_A;
         } 
       }

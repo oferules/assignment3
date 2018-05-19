@@ -100,15 +100,16 @@ trap(struct trapframe *tf)
       /// the page was swapped out check if there is enough space in the memory for it
       if(myproc()->num_of_pages_in_memory == MAX_PSYC_PAGES){
         swapOutIndex = selectPageToSwapOut(myproc());
-        
-        // uncomment below to fix the call to swap out from here
-        // popcli();
         swapOut(swapOutIndex, myproc());
       }
 
       swapIn((void*) va, myproc());
       // lapiceoi();
       return;
+    }
+    else{
+        printDebugMem(myproc());
+        cprintf("addr: %x Present flag: %d ", va , (((uint)*pte) & PTE_P)  );
     }
 
   #endif
