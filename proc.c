@@ -253,8 +253,6 @@ fork(void)
   }
 
   for(i = 0 ; i < MAX_TOTAL_PAGES - MAX_PSYC_PAGES ; i++){
-    np->mem_pages[i].next = curproc->mem_pages[i].next;
-    np->mem_pages[i].prev = curproc->mem_pages[i].prev;
     np->mem_pages[i].aging = curproc->mem_pages[i].aging;
     np->mem_pages[i].va = curproc->mem_pages[i].va;
     np->mem_pages[i].mem = curproc->mem_pages[i].mem;

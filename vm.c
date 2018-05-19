@@ -102,25 +102,36 @@ void updateMemPagesOnRemove(void* va, struct proc *p){
 
   #ifdef AQ
 
-    /// look for the first index to move to the start of the array
+    /// look for the page to remove
     int i;
-    for(i = 0 ; i < p->num_of_pages_in_memory - 1 ; i++){
+    for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
       if(p->mem_pages[i].va == va){
         break;
       }
     }
+    
+    if (i >= p->num_of_pages_in_memory)
+        panic("AQ found illegal index to remove");
 
-    /// move all the pages metadata 1 to the left after taking out one
+        
+    /// move left all the pages after the page to remove
     for(; i < p->num_of_pages_in_memory - 1; i++){
-      p->mem_pages[i] = p->mem_pages[i+1];
+      p->mem_pages[i].va = p->mem_pages[i+1].va;
+      p->mem_pages[i].mem = p->mem_pages[i+1].mem;
+      if (p->mem_pages[i].in_mem == 0 || p->mem_pages[i+1].in_mem == 0 )
+          panic("AQ not work correctly");
     }
 
-    /// remove the last (duplicated) page metadata
+    /// remove the last (duplicated) page 
     if (p->mem_pages[p->num_of_pages_in_memory - 1].in_mem == 1){
       p->mem_pages[p->num_of_pages_in_memory - 1].in_mem = 0;
       p->mem_pages[p->num_of_pages_in_memory - 1].va = 0;
       p->num_of_pages_in_memory--;
     }
+    else{
+        panic("AQ not work correctly 2");
+    }
+
   #endif
 }
 
@@ -419,18 +430,34 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       if(pa == 0)
         panic("kfree");
 
-      #ifndef NONE
-        //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
-        if(myproc()->pgdir == pgdir){
-          updateMemPagesOnRemove((void*) a, myproc());
-        }
-        //}
-      #endif
-
       char *v = P2V(pa);
       kfree(v);
       *pte = 0;
+      
+      #ifndef NONE
+        //if((strcmp(myproc()->name, "init") && strcmp(myproc()->name, "sh"))){
+      if(myproc()->pgdir == pgdir){
+        updateMemPagesOnRemove((void*) a, myproc());
+      }
+        //}
+      #endif
     }
+    #ifndef NONE
+    /// check if the page is in swap file
+    else if (*pte & PTE_PG && myproc()->pgdir == pgdir) {
+        int i;
+        for (i = 0; i < MAX_PSYC_PAGES; i++) {
+          if (myproc()->sfm[i].va == (char*)a)
+            break;
+        }
+        if (i == MAX_PSYC_PAGES || myproc()->sfm[i].in_swap_file == 0)
+            panic("deallocuvm: PTE_PG is on but page is not in swap file");
+
+        myproc()->sfm[i].in_swap_file = 0;
+        myproc()->num_of_currently_swapped_out_pages--;
+        *pte = 0;
+    }
+    #endif
   }
 
   return newsz;
@@ -486,9 +513,11 @@ copyuvm(pde_t *pgdir, uint sz)
     if(!(*pte & PTE_P) && !(*pte & PTE_PG))
       panic("copyuvm: page not present");
     if(*pte & PTE_PG){
-        pte=walkpgdir(d,(void*)i,1);
-        *pte= PTE_U | PTE_W | PTE_PG ;
-        continue;
+      pte_t * pte1 = walkpgdir(d, (void *) i, 1);
+      flags = PTE_FLAGS(*pte);
+      *pte1 = PTE_U | PTE_PG | PTE_W | PTE_ADDR(*pte) | (int) flags;
+      *pte1 = *pte1 & ~PTE_P;
+      continue;
     }
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
@@ -548,7 +577,6 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /// function to take a page from physical memory and put it in the swap file in the disc
 void swapOut(int index, struct proc *p){
-
   pte_t* pte = walkpgdir(p->pgdir, p->mem_pages[index].va, 0);
 
   if(!*pte){
@@ -744,6 +772,7 @@ int selectPageToSwapOut(struct proc *p){
     // p->last = (p->last +1) % MAX_PSYC_PAGES;
     for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
       pte_t* pte = walkpgdir_noalloc(p->pgdir, p->mem_pages[i].va);
+      /// should not swap out pages that don't belong to the user
       if((*pte & PTE_U)){
         break;
       }
@@ -754,6 +783,10 @@ int selectPageToSwapOut(struct proc *p){
 
   if(minIndex == -1){
     panic("no page was chosen to be swapped out");
+  }
+  
+  if(minIndex >= MAX_PSYC_PAGES){
+    panic("too large index for swap out");
   }
 
   return minIndex;

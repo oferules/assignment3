@@ -40,8 +40,6 @@ struct swapfile_metadata{
 };
 
 struct mem_page{
-  struct mem_page *next;
-  struct mem_page *prev;
   uint aging;
   void* va;
   void* mem;
