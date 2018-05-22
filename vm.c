@@ -624,7 +624,6 @@ void swapOut(int index, struct proc *p){
   /// refresh the TLB
   lcr3(V2P(p->pgdir));  
 
- // printDebugMem(p);
 }
 
 void swapIn(void* va, struct proc *p){
@@ -684,7 +683,6 @@ int selectPageToSwapOut(struct proc *p){
   int i;
   uint minAge = 0xffffffff;
   
-    //printDebugMem(p);
   for(i = 0 ; i < MAX_PSYC_PAGES ; i++){
     if(!p->mem_pages[i].in_mem ){
       panic("should not swap out if there is room in memory");
