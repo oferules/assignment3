@@ -664,9 +664,11 @@ void updateAQ(){
         if(!pte1 || !pte2){
           panic("updateAQ failed");
         }
-        
+
         /// replace places
-        if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
+        if((*pte1 & PTE_A) && (*pte2 & PTE_A)){
+          *pte1 = *pte1 & ~PTE_A;
+        } else if(!(*pte1 & PTE_A) && (*pte2 & PTE_A)){
           struct mem_page temp;
           temp.va=  p->mem_pages[i].va;
           temp.mem=  p->mem_pages[i].mem;
